@@ -1,7 +1,7 @@
 """Физика: столкновения круга с тайлами.
 
-Остальное (расталкивание кругов, raycast, sweep отрезка) добавится на
-следующих этапах. Функции работают с pygame.Vector2 и не знают про рендер.
+Движение игрока, raycast по тайлам и sweep отрезка против круга. Расталкивание
+кругов добавится на этапе 5-6. Функции работают с pygame.Vector2 и не знают про рендер.
 """
 import math
 from typing import Callable
@@ -85,3 +85,88 @@ def collide_circle_with_tiles(
             vel -= normal * into_wall
         touched = True
     return touched
+
+
+# --- Движение игрока ---
+
+def update_player_velocity(vel: pygame.Vector2, move_dir: pygame.Vector2, dt: float) -> None:
+    """Обновляет скорость игрока на месте по модели «разгон + занос».
+
+    move_dir: единичный вектор ввода или (0, 0).
+    Есть ввод: скорость делится на компоненту вдоль ввода и боковую.
+      вдоль: к MAX_SPEED с темпом ACCEL_RATE; если скорость направлена против ввода,
+             то к тому же MAX_SPEED, но медленнее (REVERSE_BRAKE_RATE) — отсюда
+             занос при развороте. Цель именно MAX_SPEED, а не 0: простое затухание
+             никогда не пересекло бы ноль, и игрок не смог бы тронуться назад;
+      боковая: затухает с темпом LATERAL_GRIP.
+    Нет ввода: скорость затухает с темпом SLIDE_RATE.
+    Все формулы экспоненциальные, поэтому результат не зависит от размера шага dt.
+    """
+    if move_dir.length_squared() == 0:
+        vel *= math.exp(-cfg.SLIDE_RATE * dt)
+        if vel.length_squared() < cfg.STOP_SPEED * cfg.STOP_SPEED:
+            vel.update(0, 0)
+        return
+    along = vel.dot(move_dir)
+    sideways = vel - move_dir * along
+    rate = cfg.ACCEL_RATE if along >= 0 else cfg.REVERSE_BRAKE_RATE
+    along += (cfg.MAX_SPEED - along) * (1 - math.exp(-rate * dt))
+    sideways *= math.exp(-cfg.LATERAL_GRIP * dt)
+    vel.update(move_dir * along + sideways)
+
+
+# --- Лучи и отрезки ---
+
+def raycast_tiles(
+    origin: pygame.Vector2, direction: pygame.Vector2, max_dist: float, is_solid: IsSolid
+) -> float | None:
+    """Расстояние от origin до первой твёрдой клетки вдоль единичного direction.
+
+    Алгоритм DDA по сетке тайлов. Если origin уже в твёрдой клетке: 0.
+    Возвращает None, если до max_dist стены нет.
+    """
+    if direction.length_squared() == 0:
+        return None
+    tx, ty = math.floor(origin.x / cfg.TILE), math.floor(origin.y / cfg.TILE)
+    if is_solid(tx, ty):
+        return 0.0
+    inf = math.inf
+    step_x, step_y = (1 if direction.x > 0 else -1), (1 if direction.y > 0 else -1)
+    delta_x = cfg.TILE / abs(direction.x) if direction.x else inf
+    delta_y = cfg.TILE / abs(direction.y) if direction.y else inf
+    next_x = ((tx + (step_x > 0)) * cfg.TILE - origin.x) / direction.x if direction.x else inf
+    next_y = ((ty + (step_y > 0)) * cfg.TILE - origin.y) / direction.y if direction.y else inf
+    while True:
+        if next_x < next_y:
+            dist, tx, next_x = next_x, tx + step_x, next_x + delta_x
+        else:
+            dist, ty, next_y = next_y, ty + step_y, next_y + delta_y
+        if dist > max_dist:
+            return None
+        if is_solid(tx, ty):
+            return dist
+
+
+def sweep_segment_circle(
+    start: pygame.Vector2, end: pygame.Vector2, center: pygame.Vector2, radius: float
+) -> float | None:
+    """Доля пути t (0..1), на которой отрезок start->end впервые входит в круг.
+
+    Если start уже внутри круга: 0. Если отрезок круг не задевает: None.
+    Решает |start + t*(end-start) - center|^2 = radius^2, поэтому быстрые пули
+    не пролетают сквозь цели.
+    """
+    move = end - start
+    offset = start - center
+    c = offset.length_squared() - radius * radius
+    if c <= 0:
+        return 0.0
+    a = move.length_squared()
+    if a == 0:
+        return None
+    b = 2 * offset.dot(move)
+    disc = b * b - 4 * a * c
+    if disc < 0:
+        return None
+    t = (-b - math.sqrt(disc)) / (2 * a)
+    return t if 0 <= t <= 1 else None

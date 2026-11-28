@@ -11,9 +11,9 @@ import pygame
 import ui
 from config import cfg
 from input import InputHandler, InputState
-from physics import collide_circle_with_tiles
 from renderer import Renderer
 from room import Room, RoomError, load_all_rooms, pick_next_room
+from simulation import step_play
 from world import World
 
 
@@ -66,7 +66,7 @@ class Game:
         # До этапа 10 игра стартует сразу в PLAY
         self.state = State.PLAY
         index = self.rng.randrange(len(rooms)) if room_index is None else room_index
-        self.world = World.from_room(rooms[index], index)
+        self.world = World.from_room(rooms[index], index, rng=self.rng)
 
     # --- Цикл ---
 
@@ -119,18 +119,10 @@ class Game:
         if inp.restart_pressed:  # в PLAY: перезапуск текущей комнаты (отладка)
             self.load_room(self.world.room_index)
             return
-        self._move_player_debug(dt, inp)
-        self.world.time += dt
-
-    def _move_player_debug(self, dt: float, inp: InputState) -> None:
-        """ВРЕМЕННО (этап 2): прямое движение, чтобы проверить коллизии. Заменится на этапе 3."""
-        player = self.world.player
-        player.vel.update(inp.move_vec * cfg.PLAYER_DEBUG_SPEED)
-        player.pos += player.vel * dt
-        collide_circle_with_tiles(player.pos, player.vel, player.radius, self.world.room.is_solid)
+        step_play(self.world, inp, dt)
 
     def load_room(self, index: int) -> None:
-        self.world = World.from_room(self.rooms[index], index, self.world.rooms_cleared)
+        self.world = World.from_room(self.rooms[index], index, self.world.rooms_cleared, self.rng)
 
     def next_room_index(self) -> int:
         return pick_next_room(len(self.rooms), self.world.room_index, self.rng)
