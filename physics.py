@@ -1,7 +1,7 @@
 """Физика: столкновения круга с тайлами.
 
-Движение игрока, raycast по тайлам и sweep отрезка против круга. Расталкивание
-кругов добавится на этапе 5-6. Функции работают с pygame.Vector2 и не знают про рендер.
+Движение игрока, расталкивание кругов, raycast по тайлам и sweep отрезка против круга.
+Функции работают с pygame.Vector2 и не знают про рендер.
 """
 import math
 from typing import Callable
@@ -114,6 +114,43 @@ def update_player_velocity(vel: pygame.Vector2, move_dir: pygame.Vector2, dt: fl
     sideways *= math.exp(-cfg.LATERAL_GRIP * dt)
     vel.update(move_dir * along + sideways)
 
+
+# --- Расталкивание кругов ---
+
+def separate_circles(
+    pos_a: pygame.Vector2, radius_a: float,
+    pos_b: pygame.Vector2, radius_b: float,
+    share_a: float,
+) -> pygame.Vector2 | None:
+    """Раздвигает два пересекающихся круга вдоль линии центров (pos_a и pos_b меняются на месте).
+
+    share_a: доля сдвига, которую берёт на себя A (0..1); остальное достаётся B.
+    1 = сдвигается только A (B непоколебим), 0.5 = поровну.
+    Единая функция для всех пар (игрок-враг, враг-враг). Урон от касания она не
+    наносит: контактный урон Chaser считается отдельно (contact_damage).
+    Возвращает единичную нормаль от B к A, если круги пересекались, иначе None.
+    """
+    offset = pos_a - pos_b
+    min_dist = radius_a + radius_b
+    dist_sq = offset.length_squared()
+    if dist_sq >= min_dist * min_dist:
+        return None
+    if dist_sq > cfg.COLLISION_EPS:
+        dist = math.sqrt(dist_sq)
+        normal = offset / dist
+    else:  # центры совпали: направление выбираем произвольно, но детерминированно
+        dist, normal = 0.0, pygame.Vector2(1, 0)
+    overlap = min_dist - dist
+    pos_a += normal * (overlap * share_a)
+    pos_b -= normal * (overlap * (1.0 - share_a))
+    return normal
+
+
+def remove_velocity_into(vel: pygame.Vector2, normal: pygame.Vector2) -> None:
+    """Гасит составляющую скорости, направленную против нормали (внутрь препятствия)."""
+    into = vel.dot(normal)
+    if into < 0:
+        vel -= normal * into
 
 # --- Лучи и отрезки ---
 

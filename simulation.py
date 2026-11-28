@@ -4,6 +4,7 @@
   2) игрок (движение, blink)            — blink появится на этапе 5
   3) выстрелы игрока и его пули
   4) ИИ и движение врагов               — поведение появится на этапах 6-8
+     затем расталкивание кругов и коллизия со стенами
   5-7) вражеские пули, лучи снайпера, контактный урон — этапы 6-9
   8) удаление мёртвых
 Логика не вызывает рендер и не читает клавиатуру напрямую.
@@ -15,7 +16,8 @@ import pygame
 from config import cfg
 from entities import Bullet, EnemyBase
 from input import InputState
-from physics import collide_circle_with_tiles, raycast_tiles, sweep_segment_circle, update_player_velocity
+from physics import (collide_circle_with_tiles, raycast_tiles, remove_velocity_into, separate_circles,
+                     sweep_segment_circle, update_player_velocity)
 from world import World
 
 
@@ -24,6 +26,7 @@ def step_play(world: World, inp: InputState, dt: float) -> None:
     _player_fire(world, inp, dt)
     _move_player_bullets(world, dt)
     _update_enemies(world, dt)
+    _resolve_overlaps(world)
     _remove_dead(world)
     world.time += dt
 
@@ -97,6 +100,42 @@ def _update_enemies(world: World, dt: float) -> None:
     for enemy in world.enemies:
         enemy.spawn_left = max(0.0, enemy.spawn_left - dt)
         enemy.hit_timer = max(0.0, enemy.hit_timer - dt)
+
+
+# --- расталкивание после движения (шаг 4) ---
+
+def _solid_enemies(world: World) -> list[EnemyBase]:
+    """Твёрдые враги: проявляющиеся и мёртвые в коллизиях не участвуют."""
+    return [e for e in world.enemies if not e.is_spawning and not e.is_dead]
+
+
+def _push_pair(pos_a, radius_a, vel_a, pos_b, radius_b, vel_b, share_a: float) -> None:
+    normal = separate_circles(pos_a, radius_a, pos_b, radius_b, share_a)
+    if normal is None:
+        return
+    if share_a > 0:
+        remove_velocity_into(vel_a, normal)
+    if share_a < 1:
+        remove_velocity_into(vel_b, -normal)
+
+
+def _resolve_overlaps(world: World) -> None:
+    """Игрок-враг и враг-враг расталкиваются одной функцией, затем всех выталкивает из стен.
+
+    Несколько проходов нужны, чтобы толпа врагов у стены не «сжималась» в одну точку;
+    стены побеждают: после расталкивания круги снова выводятся из тайлов.
+    """
+    player, solid = world.player, _solid_enemies(world)
+    for _ in range(cfg.SEPARATION_ITERATIONS):
+        for enemy in solid:
+            _push_pair(player.pos, player.radius, player.vel, enemy.pos, enemy.radius, enemy.vel,
+                       cfg.PLAYER_PUSH_SHARE)
+        for i, a in enumerate(solid):
+            for b in solid[i + 1:]:
+                _push_pair(a.pos, a.radius, a.vel, b.pos, b.radius, b.vel, cfg.ENEMY_PUSH_SHARE)
+        collide_circle_with_tiles(player.pos, player.vel, player.radius, world.room.is_solid)
+        for enemy in solid:
+            collide_circle_with_tiles(enemy.pos, enemy.vel, enemy.radius, world.room.is_solid)
 
 
 # --- 8) удаление ---
