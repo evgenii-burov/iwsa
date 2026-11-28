@@ -9,6 +9,8 @@ from entities import EnemyBase
 from room import Room
 from world import World
 
+SPAWN_RING_WIDTH = 2  # px, толщина контура проявляющегося врага
+
 ENEMY_COLORS: dict[str, tuple[int, int, int]] = {
     "C": cfg.COLOR_CHASER,
     "G": cfg.COLOR_GUNNER,
@@ -46,8 +48,16 @@ class Renderer:
         self.screen.blit(self._room_surface(world, draw_grid), (0, 0))
         for enemy in world.enemies:
             self._draw_enemy(enemy)
+        for bullet in world.bullets:
+            pygame.draw.circle(self.screen, cfg.COLOR_BULLET, bullet.pos, cfg.BULLET_RADIUS)
         player = world.player
         pygame.draw.circle(self.screen, cfg.COLOR_PLAYER, player.pos, player.radius)
 
     def _draw_enemy(self, enemy: EnemyBase) -> None:
-        pygame.draw.circle(self.screen, ENEMY_COLORS[enemy.kind], enemy.pos, enemy.radius)
+        color = ENEMY_COLORS[enemy.kind]
+        if enemy.is_spawning:  # индикатор проявления: только контур, враг ещё не твёрдый
+            pygame.draw.circle(self.screen, color, enemy.pos, enemy.radius, SPAWN_RING_WIDTH)
+            return
+        if enemy.hit_timer > 0:  # короткое мигание при попадании
+            color = cfg.COLOR_HIT_FLASH
+        pygame.draw.circle(self.screen, color, enemy.pos, enemy.radius)

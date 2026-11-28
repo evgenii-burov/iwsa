@@ -35,12 +35,34 @@ class Config:
 
     # --- Игрок ---
     PLAYER_RADIUS: float = 10.0     # px
-    PLAYER_DEBUG_SPEED: float = 280.0  # px/s, ВРЕМЕННО (этап 2): прямое движение до этапа 3
 
-    # --- Радиусы врагов ---
-    CHASER_RADIUS: float = 10.0     # px
-    GUNNER_RADIUS: float = 12.0     # px
-    SNIPER_RADIUS: float = 12.0     # px
+    # Движение («Дум на шифте»): резкий старт и занос
+    MAX_SPEED: float = 280.0            # px/s, предельная скорость вдоль ввода
+    ACCEL_RATE: float = 14.0            # 1/s, темп разгона к MAX_SPEED (больше = резче старт)
+    REVERSE_BRAKE_RATE: float = 6.0     # 1/s, темп гашения скорости против ввода
+                                        # (меньше ACCEL_RATE: при развороте игрока заносит)
+    LATERAL_GRIP: float = 5.0           # 1/s, гашение боковой скорости (меньше = больше заноса)
+    SLIDE_RATE: float = 3.5             # 1/s, затухание скорости без ввода (меньше = дольше скользит)
+    STOP_SPEED: float = 1.0             # px/s, ниже этого скорость без ввода обнуляется
+
+    # --- Стрельба игрока ---
+    FIRE_RATE: float = 10.0             # выстрелов/с
+    BULLET_SPEED: float = 600.0         # px/s
+    BULLET_DAMAGE: int = 1              # урон одной пули
+    FIRE_SPREAD_DEG: float = 0.0        # градусы, разброс (случайный в ±значение)
+    BULLET_RADIUS: float = 3.0          # px, только для отрисовки (попадание считается точкой)
+
+    # --- Враги: общее ---
+    SPAWN_TIME: float = 0.8             # s, «проявление» без урона и без твёрдости
+    HIT_FLASH_TIME: float = 0.08        # s, мигание врага при попадании
+
+    # --- Враги: радиусы и здоровье (поведение появится на этапах 6-8) ---
+    CHASER_RADIUS: float = 10.0         # px
+    GUNNER_RADIUS: float = 12.0         # px
+    SNIPER_RADIUS: float = 12.0         # px
+    CHASER_HP: int = 3                  # единиц здоровья
+    GUNNER_HP: int = 4
+    SNIPER_HP: int = 5
 
     # --- Цвета ---
     COLOR_BG: Color = (10, 10, 16)
@@ -52,6 +74,8 @@ class Config:
     COLOR_GUNNER: Color = (255, 200, 70)
     COLOR_SNIPER: Color = (190, 120, 255)
     COLOR_TEXT: Color = (220, 220, 230)
+    COLOR_BULLET: Color = (255, 255, 200)
+    COLOR_HIT_FLASH: Color = (255, 255, 255)
 
     # --- HUD ---
     FONT_SIZE: int = 22             # px
